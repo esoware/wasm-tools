@@ -10,6 +10,7 @@ pub enum PrimitiveTypeInfo {
     V128,
     FuncRef,
     ExternRef,
+    ExnRef,
     Empty,
 }
 
@@ -47,6 +48,7 @@ impl TryFrom<wasmparser::RefType> for PrimitiveTypeInfo {
         Ok(match value {
             wasmparser::RefType::FUNCREF => PrimitiveTypeInfo::FuncRef,
             wasmparser::RefType::EXTERNREF => PrimitiveTypeInfo::ExternRef,
+            wasmparser::RefType::EXNREF => PrimitiveTypeInfo::ExnRef,
             other => return Err(Error::unsupported(format!("type {other:?}"))),
         })
     }

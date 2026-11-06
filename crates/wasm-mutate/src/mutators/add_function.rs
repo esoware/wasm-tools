@@ -73,6 +73,12 @@ impl Mutator for AddFunctionMutator {
                         ty: AbstractHeapType::Extern,
                     });
                 }
+                PrimitiveTypeInfo::ExnRef => {
+                    func.instructions().ref_null(HeapType::Abstract {
+                        shared: false,
+                        ty: AbstractHeapType::Exn,
+                    });
+                }
                 PrimitiveTypeInfo::Empty => unreachable!(),
             }
         }
@@ -152,6 +158,25 @@ mod tests {
                     (type (;0;) (func (param i32 f32) (result i64)))
                     (func (;0;) (type 0) (param i32 f32) (result i64)
                       i64.const 0)
+                )
+            "#,
+        );
+    }
+
+    #[test]
+    fn test_add_function_returning_exnref() {
+        crate::mutators::match_mutation(
+            r#"
+                (module
+                    (type (;0;) (func (result exnref)))
+                )
+            "#,
+            AddFunctionMutator,
+            r#"
+                (module
+                    (type (;0;) (func (result exnref)))
+                    (func (;0;) (type 0) (result exnref)
+                      ref.null exn)
                 )
             "#,
         );

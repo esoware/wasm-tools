@@ -4,7 +4,7 @@ use super::Mutator;
 use crate::module::{PrimitiveTypeInfo, TypeInfo};
 use crate::{Result, WasmMutate};
 use rand::RngExt;
-use wasm_encoder::{CodeSection, Function, HeapType, Module};
+use wasm_encoder::{AbstractHeapType, CodeSection, Function, HeapType, Module};
 use wasmparser::CodeSectionReader;
 
 /// Mutator that replaces the body of a function with an empty body
@@ -65,6 +65,12 @@ impl Mutator for SnipMutator {
                             }
                             PrimitiveTypeInfo::ExternRef => {
                                 f.instructions().ref_null(HeapType::EXTERN);
+                            }
+                            PrimitiveTypeInfo::ExnRef => {
+                                f.instructions().ref_null(HeapType::Abstract {
+                                    shared: false,
+                                    ty: AbstractHeapType::Exn,
+                                });
                             }
                             PrimitiveTypeInfo::Empty => {
                                 unreachable!()

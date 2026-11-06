@@ -96,6 +96,13 @@ impl<'cfg, 'wasm> Reencode for InitTranslator<'cfg, 'wasm> {
             O::RefNull {
                 hty: wasmparser::HeapType::EXTERN,
             } => T::ExternRef,
+            O::RefNull {
+                hty:
+                    wasmparser::HeapType::Abstract {
+                        shared: false,
+                        ty: wasmparser::AbstractHeapType::Exn,
+                    },
+            } => T::ExnRef,
             O::GlobalGet { global_index } => {
                 match self.config.info().global_types.get(global_index as usize) {
                     Some(ty) => *ty,
@@ -159,6 +166,10 @@ impl<'cfg, 'wasm> Reencode for InitTranslator<'cfg, 'wasm> {
             }),
             T::FuncRef => CE::ref_null(wasm_encoder::HeapType::FUNC),
             T::ExternRef => CE::ref_null(wasm_encoder::HeapType::EXTERN),
+            T::ExnRef => CE::ref_null(wasm_encoder::HeapType::Abstract {
+                shared: false,
+                ty: wasm_encoder::AbstractHeapType::Exn,
+            }),
             T::Empty => unreachable!(),
         };
         log::trace!("... replacing original expression with {new_op:?}");
