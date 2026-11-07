@@ -116,6 +116,13 @@ pub struct WasmMutate<'wasm> {
     #[cfg_attr(feature = "clap", clap(long))]
     no_new_globals: bool,
 
+    /// Never use the mutators with this name. A name matches a mutator when it
+    /// equals a segment of the mutator's path, so `custom` skips every mutator
+    /// in `mutators::custom` and `RemoveItemMutator` skips that one type. May
+    /// be given more than once.
+    #[cfg_attr(feature = "clap", clap(long = "skip-mutator", value_name = "NAME"))]
+    skip_mutators: Vec<String>,
+
     // Note: this is only exposed via the programmatic interface, not via the
     // CLI.
     #[cfg_attr(feature = "clap", clap(skip = None))]
@@ -136,6 +143,7 @@ impl Default for WasmMutate<'_> {
             preserve_semantics: false,
             reduce: false,
             no_new_globals: false,
+            skip_mutators: Vec::new(),
             raw_mutate_func: None,
             fuel: u64::MAX,
             rng: None,
@@ -183,6 +191,17 @@ impl<'wasm> WasmMutate<'wasm> {
     /// peephole rewrites that spill a value through a new global.
     pub fn no_new_globals(&mut self, no_new_globals: bool) -> &mut Self {
         self.no_new_globals = no_new_globals;
+        self
+    }
+
+    /// Never use the mutators with this name.
+    ///
+    /// A name matches a mutator when it equals a segment of the mutator's
+    /// path, so `custom` skips every mutator in `mutators::custom` and
+    /// `RemoveItemMutator` skips that one type. Running with a name that
+    /// matches no mutator is an error.
+    pub fn skip_mutator(&mut self, name: impl Into<String>) -> &mut Self {
+        self.skip_mutators.push(name.into());
         self
     }
 
@@ -258,9 +277,31 @@ impl<'wasm> WasmMutate<'wasm> {
             &RemoveStartSection,
         ];
 
+        let is_named = |mutator: &&dyn Mutator, name: &str| {
+            mutator.name().split("::").any(|segment| segment == name)
+        };
+        for name in &self.skip_mutators {
+            if !MUTATORS.iter().any(|mutator| is_named(mutator, name)) {
+                return Err(Error::other(format!("`{name}` does not name a mutator")));
+            }
+        }
+        let mutators: Vec<&dyn Mutator> = MUTATORS
+            .iter()
+            .copied()
+            .filter(|mutator| {
+                !self
+                    .skip_mutators
+                    .iter()
+                    .any(|name| is_named(mutator, name))
+            })
+            .collect();
+        if mutators.is_empty() {
+            return Err(Error::no_mutations_applicable());
+        }
+
         // Attempt all mutators, but start at an arbitrary index.
-        let start = self.rng().random_range(0..MUTATORS.len());
-        for m in MUTATORS.iter().cycle().skip(start).take(MUTATORS.len()) {
+        let start = self.rng().random_range(0..mutators.len());
+        for m in mutators.iter().cycle().skip(start).take(mutators.len()) {
             let can_mutate = m.can_mutate(self);
             log::trace!("Can `{}` mutate? {}", m.name(), can_mutate);
             if !can_mutate {
@@ -329,6 +370,58 @@ impl<'wasm> WasmMutate<'wasm> {
         data.splice(start..end, self.rng().random_iter().take(len));
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod skip_mutator_tests {
+    use super::WasmMutate;
+
+    fn has_type_section(bytes: &[u8]) -> bool {
+        wasmparser::Parser::new(0)
+            .parse_all(bytes)
+            .any(|payload| matches!(payload, Ok(wasmparser::Payload::TypeSection(_))))
+    }
+
+    fn mutate_empty_module(seed: u64, skipped: &[&str]) -> Option<Vec<u8>> {
+        let wasm = wat::parse_str("(module)").unwrap();
+        let mut config = WasmMutate::default();
+        config
+            .seed(seed)
+            .preserve_semantics(true)
+            .no_new_globals(true);
+        for name in skipped {
+            config.skip_mutator(*name);
+        }
+        let mut mutations = config.run(&wasm).ok()?;
+        let first = mutations.next()?;
+        first.ok()
+    }
+
+    #[test]
+    fn skip_mutator_rejects_an_unknown_name() {
+        let wasm = wat::parse_str("(module)").unwrap();
+        let mut config = WasmMutate::default();
+        config.skip_mutator("nonsense");
+        assert!(config.run(&wasm).is_err());
+    }
+
+    #[test]
+    fn skip_mutator_matches_path_segments() {
+        let skipped = ["custom", "remove_section", "remove_item"];
+        let mut applied = 0;
+        for seed in 0..100 {
+            if let Some(bytes) = mutate_empty_module(seed, &skipped) {
+                assert!(has_type_section(&bytes));
+                applied += 1;
+            }
+        }
+        assert!(applied > 0);
+        assert!(
+            (0..100)
+                .filter_map(|seed| mutate_empty_module(seed, &[]))
+                .any(|bytes| !has_type_section(&bytes))
+        );
     }
 }
 
