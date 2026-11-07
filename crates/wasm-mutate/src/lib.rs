@@ -111,6 +111,11 @@ pub struct WasmMutate<'wasm> {
     #[cfg_attr(feature = "clap", clap(long))]
     reduce: bool,
 
+    /// Never add a global to the Wasm module. This disables the `add_global`
+    /// mutator and the peephole rules that spill values through a new global.
+    #[cfg_attr(feature = "clap", clap(long))]
+    no_new_globals: bool,
+
     // Note: this is only exposed via the programmatic interface, not via the
     // CLI.
     #[cfg_attr(feature = "clap", clap(skip = None))]
@@ -130,6 +135,7 @@ impl Default for WasmMutate<'_> {
             seed,
             preserve_semantics: false,
             reduce: false,
+            no_new_globals: false,
             raw_mutate_func: None,
             fuel: u64::MAX,
             rng: None,
@@ -168,6 +174,15 @@ impl<'wasm> WasmMutate<'wasm> {
     /// reducer.
     pub fn reduce(&mut self, reduce: bool) -> &mut Self {
         self.reduce = reduce;
+        self
+    }
+
+    /// Configure whether mutations may add globals to the Wasm module.
+    ///
+    /// Setting this to `true` disables the `add_global` mutator and the
+    /// peephole rewrites that spill a value through a new global.
+    pub fn no_new_globals(&mut self, no_new_globals: bool) -> &mut Self {
+        self.no_new_globals = no_new_globals;
         self
     }
 

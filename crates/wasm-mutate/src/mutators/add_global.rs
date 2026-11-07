@@ -60,13 +60,23 @@ impl Mutator for AddGlobalMutator {
 
     fn can_mutate(&self, config: &WasmMutate) -> bool {
         // An unreferenced global does not change observable module behavior.
-        !config.reduce
+        !config.reduce && !config.no_new_globals
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn no_new_globals_disables_the_mutator() {
+        let wasm = wat::parse_str("(module)").unwrap();
+        let mut config = WasmMutate::default();
+        config.setup(&wasm).unwrap();
+        assert!(AddGlobalMutator.can_mutate(&config));
+        config.no_new_globals(true);
+        assert!(!AddGlobalMutator.can_mutate(&config));
+    }
 
     #[test]
     fn add_global_to_empty_module() {

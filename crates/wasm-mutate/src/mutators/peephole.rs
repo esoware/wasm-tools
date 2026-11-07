@@ -1626,6 +1626,23 @@ mod tests {
     }
 
     #[test]
+    fn no_new_globals_drops_the_spill_rules() {
+        let wasm = wat::parse_str("(module)").unwrap();
+        let spill_rules = |no_new_globals: bool| {
+            let mut config = WasmMutate::default();
+            config.no_new_globals(no_new_globals);
+            config.setup(&wasm).unwrap();
+            PeepholeMutator::new(3)
+                .get_rules(&config)
+                .into_iter()
+                .filter(|rule| rule.name().to_string().ends_with(".use_of_global"))
+                .count()
+        };
+        assert_eq!(spill_rules(false), 4);
+        assert_eq!(spill_rules(true), 0);
+    }
+
+    #[test]
     fn preserve_semantics_does_not_drop_trap() {
         let module = "(module)";
         let locals = vec![PrimitiveTypeInfo::I32];

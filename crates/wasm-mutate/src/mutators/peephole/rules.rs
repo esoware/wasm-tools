@@ -311,7 +311,7 @@ impl PeepholeMutator {
         }
 
         // Spill expressions to a new global and then use the global's value.
-        if !config.reduce {
+        if !config.reduce && !config.no_new_globals {
             let max_globals = 100_000;
             rewrite!(
                 "i32.use_of_global";
